@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import redisClient from "../redis/index.js";
 
 const registerUser = asyncHandler(async (req, res) => {
   const { username, email, password } = req.body;
@@ -29,6 +30,7 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Something went wrong while registering user!!");
   }
 
+  await redisClient.del(`All_USERS`);
   return res
     .status(200)
     .json(new ApiResponse(200, "Successfully Registered!!"));
@@ -70,12 +72,19 @@ const logoutUser = asyncHandler(async (req, res) => {
 });
 
 const getAllUsers = asyncHandler(async (req, res) => {
+  const cachedUser = await redisClient.get(`All_USERS`);
+  if (cachedUser) {
+    return res.json(JSON.parse(cachedUser));
+  }
+
   const users = await User.find({ _id: { $ne: req.params.id } }).select([
     "email",
     "username",
     "avatarImage",
     "_id",
   ]);
+
+  await redisClient.setex(`All_USERS`, 60, JSON.stringify(users));
   return res.json({ users });
 });
 
